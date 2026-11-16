@@ -1,0 +1,313 @@
+
+
+<!DOCTYPE html>
+
+<html lang="ar" dir="rtl">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>شجرة العائلة</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+
+*{box-sizing:border-box}
+
+body{margin:0;background:#f5f0e4;color:#263b2c;font-family:Tahoma,Arial}
+
+header{background:#183b2b;color:#f5e5b4;padding:30px 12px;text-align:center;border-bottom:4px solid #bd9a4a}
+
+header h1{margin:5px;font-size:30px}
+
+main{max-width:950px;margin:auto;padding:20px}
+
+.card{background:#fffdf7;border:1px solid #d8c99f;border-radius:15px;padding:20px;margin:15px 0;box-shadow:0 5px 18px #49391b12}
+
+h2{color:#244a35}
+
+.families{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:13px}
+
+.family{background:#204633;color:#fff1c5;padding:25px 10px;border-radius:13px;text-align:center;cursor:pointer;border:2px solid #c5a65b}
+
+.family:hover{background:#396447}
+
+input,textarea,select{width:100%;padding:13px;border:1px solid #cdbd91;border-radius:9px;margin:8px 0;font:inherit}
+
+button{background:#244b35;color:white;border:0;padding:12px 18px;border-radius:9px;cursor:pointer;font:inherit;margin:5px}
+
+button.alt{background:#9b7838}
+
+.person{background:#fffaf0;border:1px solid #c6ad70;border-radius:12px;padding:15px;margin:12px auto;max-width:520px;text-align:center}
+
+.person img{width:85px;height:85px;object-fit:cover;border-radius:50%}
+
+.children{border-right:2px solid #b79a53;margin-right:20px;padding-right:15px}
+
+.hidden{display:none}
+
+small{color:#786c54}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>شجرة العائلة</h1>
+
+<p>بيت اليزيدي | بيت عيال علي القحطاني | بيت القحطاني</p>
+
+</header>
+
+<main>
+
+<section class="card" id="home">
+
+<h2>مرحبًا بكم في شجرة العائلة</h2>
+
+<p>اختر العائلة للدخول إلى شجرتها.</p>
+
+<div class="families">
+
+<div class="family" onclick="choose('yazidi','بيت اليزيدي')"><h2>بيت اليزيدي</h2><p>عرض شجرة العائلة</p></div>
+
+<div class="family" onclick="choose('awlad-ali','بيت عيال علي القحطاني')"><h2>بيت عيال علي القحطاني</h2><p>عرض شجرة العائلة</p></div>
+
+<div class="family" onclick="choose('qahtani','بيت القحطاني')"><h2>بيت القحطاني</h2><p>عرض شجرة العائلة</p></div>
+
+</div>
+
+</section>
+
+<section class="card hidden" id="login">
+
+<button class="alt" onclick="show('home')">رجوع</button>
+
+<h2 id="loginTitle">تسجيل الدخول</h2>
+
+<input id="email" type="email" placeholder="البريد الإلكتروني">
+
+<input id="password" type="password" placeholder="كلمة المرور">
+
+<button onclick="login()">دخول</button>
+
+<p id="loginMsg"></p>
+
+</section>
+
+<section class="card hidden" id="dashboard">
+
+<button class="alt" onclick="logout()">تسجيل الخروج</button>
+
+<h2 id="familyTitle"></h2>
+
+<input id="search" placeholder="ابحث عن اسم..." oninput="render()">
+
+<div id="admin" class="hidden">
+
+<h2>إضافة فرد</h2>
+
+<input id="name" placeholder="اسم الشخص">
+
+<input id="info" placeholder="معلومات إضافية">
+
+<select id="parent"><option value="">بدون أب (فرد رئيسي)</option></select>
+
+<input id="photo" type="file" accept="image/*">
+
+<button onclick="addPerson()">إضافة</button>
+
+</div>
+
+<div id="tree"></div>
+
+<p id="message"></p>
+
+</section>
+
+</main>
+
+<script>
+
+const URL="ضع رابط مشروع Supabase هنا";
+
+const KEY="ضع Publishable Key هنا";
+
+const db=window.supabase.createClient(URL,KEY);
+
+let family="",familyName="",role="",people=[];
+
+function show(id){
+
+ ["home","login","dashboard"].forEach(x=>document.getElementById(x).classList.add("hidden"));
+
+ document.getElementById(id).classList.remove("hidden");
+
+}
+
+function choose(id,name){
+
+ family=id;familyName=name;
+
+ document.getElementById("loginTitle").textContent="الدخول إلى "+name;
+
+ show("login");
+
+}
+
+async function login(){
+
+ const email=document.getElementById("email").value.trim();
+
+ const password=document.getElementById("password").value;
+
+ const r=await db.auth.signInWithPassword({email,password});
+
+ if(r.error){msg(r.error.message);return}
+
+ const m=await db.from("family_members").select("*").eq("user_id",r.data.user.id).single();
+
+ if(m.error){await db.auth.signOut();msg("الحساب غير مربوط بالموقع");return}
+
+ role=m.data.role;
+
+ if(role!=="admin"&&m.data.family_id!==family){
+
+  await db.auth.signOut();msg("هذا الحساب لا يملك صلاحية دخول هذه العائلة");return;
+
+ }
+
+ document.getElementById("admin").classList.toggle("hidden",role!=="admin");
+
+ document.getElementById("familyTitle").textContent=familyName;
+
+ show("dashboard");
+
+ await load();
+
+}
+
+function msg(t){document.getElementById("loginMsg").textContent=t}
+
+async function logout(){await db.auth.signOut();show("home")}
+
+async function load(){
+
+ const r=await db.from("people").select("*").eq("family_id",family).order("name");
+
+ if(r.error){document.getElementById("message").textContent=r.error.message;return}
+
+ people=r.data||[];
+
+ const s=document.getElementById("parent");
+
+ s.innerHTML='<option value="">بدون أب (فرد رئيسي)</option>';
+
+ people.forEach(p=>s.innerHTML+=`<option value="${p.id}">${esc(p.name)}</option>`);
+
+ render();
+
+}
+
+function esc(v){
+
+ return String(v||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+}
+
+function render(){
+
+ const q=document.getElementById("search").value.toLowerCase();
+
+ const tree=document.getElementById("tree");tree.innerHTML="";
+
+ function branch(parent,box,level){
+
+  people.filter(p=>(p.parent_id||null)===parent).forEach(p=>{
+
+   const kids=people.filter(c=>c.parent_id===p.id);
+
+   if(q&&!p.name.toLowerCase().includes(q)&&!kids.some(c=>c.name.toLowerCase().includes(q)))return;
+
+   const d=document.createElement("div");d.className="person";
+
+   d.style.marginRight=(level*12)+"px";
+
+   d.innerHTML=`<strong>${esc(p.name)}</strong>${p.info?`<p>${esc(p.info)}</p>`:""}
+
+   ${role==="admin"?`<button class="alt" onclick="removePerson('${p.id}')">حذف</button>`:""}`;
+
+   box.appendChild(d);
+
+   if(kids.length){const child=document.createElement("div");child.className="children";box.appendChild(child);branch(p.id,child,level+1)}
+
+  });
+
+ }
+
+ branch(null,tree,0);
+
+ if(!tree.innerHTML)tree.textContent="لا توجد أسماء مطابقة أو لم تتم إضافة أفراد بعد.";
+
+}
+
+async function addPerson(){
+
+ const name=document.getElementById("name").value.trim();
+
+ if(!name)return alert("اكتب الاسم");
+
+ const row={family_id:family,parent_id:document.getElementById("parent").value||null,name,info:document.getElementById("info").value.trim()};
+
+ const file=document.getElementById("photo").files[0];
+
+ if(file){
+
+  const path=family+"/"+crypto.randomUUID()+"."+file.name.split(".").pop();
+
+  const up=await db.storage.from("family-photos").upload(path,file);
+
+  if(up.error)return alert(up.error.message);
+
+  row.photo_path=path;
+
+ }
+
+ const r=await db.from("people").insert(row);
+
+ if(r.error)return alert(r.error.message);
+
+ document.getElementById("name").value="";
+
+ document.getElementById("info").value="";
+
+ document.getElementById("photo").value="";
+
+ await load();
+
+}
+
+async function removePerson(id){
+
+ if(!confirm("هل تريد حذف هذا الشخص؟"))return;
+
+ const r=await db.from("people").delete().eq("id",id);
+
+ if(r.error)return alert(r.error.message);
+
+ await load();
+
+}
+
+</script>
+
+</body>
+
+</html>
