@@ -1,0 +1,855 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>شجرة العائلة</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f0e4;color:#263b2c;font-family:Tahoma,Arial}
+header{background:#183b2b;color:#f5e5b4;padding:27px 12px;text-align:center;border-bottom:4px solid #bd9a4a}
+header h1{font-size:29px;margin:5px}
+header p{line-height:1.8}
+main{max-width:1200px;margin:auto;padding:16px}
+.card{background:#fffdf7;border:1px solid #d8c99f;border-radius:16px;padding:19px;margin:15px 0;box-shadow:0 5px 18px #49391b12}
+h2{color:#244a35}
+.families{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.family{background:#204633;color:#fff1c5;padding:25px 12px;border-radius:13px;text-align:center;cursor:pointer;border:2px solid #c5a65b}
+.family h2{color:#fff1c5}
+.family:hover{background:#396447}
+input,textarea,select{width:100%;padding:13px;border:1px solid #cdbd91;border-radius:9px;margin:8px 0;font:inherit;background:white}
+textarea{min-height:75px;resize:vertical}
+button{background:#244b35;color:white;border:0;padding:12px 17px;border-radius:9px;cursor:pointer;font:inherit;margin:5px}
+button.alt{background:#9b7838}
+button.danger{background:#9b3939}
+button:disabled{opacity:.5;cursor:wait}
+.hidden{display:none!important}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar button{flex:1}
+.message{white-space:pre-wrap;padding:10px 0;color:#9b3939}
+.success{color:#27643b}
+.muted{color:#786c54;font-size:13px}
+hr{border:0;border-top:1px solid #dfd2ad;margin:22px 0}
+footer{text-align:center;color:#81775f;padding:25px;font-size:13px}
+
+/* اختيار الجنس */
+.gender-options{display:flex;gap:12px;margin:8px 0 15px}
+.gender-option{flex:1;border:1px solid #cdbd91;border-radius:10px;padding:12px;text-align:center;cursor:pointer;background:white}
+.gender-option input{width:auto;margin:0 5px}
+.gender-option:has(input:checked){background:#f3ecd8;border-color:#9b7838}
+
+/* مساحة الشجرة */
+#tree{
+ overflow-x:auto;
+ overflow-y:visible;
+ padding:30px 15px 55px;
+ min-height:100px;
+ --card-width:170px;
+ --branch-pad:14px;
+}
+
+/* الأفراد */
+.tree-roots{
+ display:flex;
+ align-items:flex-start;
+ justify-content:center;
+ gap:45px;
+ width:max-content;
+ min-width:100%;
+}
+
+.person-node{
+ display:flex;
+ flex-direction:column;
+ align-items:center;
+ position:relative;
+ width:max-content;
+}
+
+.person-card{
+ background:#fffaf0;
+ border:1px solid #c6ad70;
+ border-radius:13px;
+ padding:14px 12px;
+ width:var(--card-width,170px);
+ text-align:center;
+ box-shadow:0 3px 10px #49391b12;
+ position:relative;
+ z-index:2;
+}
+
+.person-card strong{
+ display:block;
+ overflow-wrap:anywhere;
+}
+
+.person-card p{
+ font-size:13px;
+ line-height:1.7;
+ margin:8px 0;
+}
+
+/* الصور الافتراضية */
+.avatar{
+ width:88px;
+ height:88px;
+ border-radius:50%;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ margin:0 auto 10px;
+ border:3px solid #d5bd7e;
+ overflow:hidden;
+ font-size:34px;
+ color:white;
+}
+.avatar.male{background:#929292}
+.avatar.female{background:#d98cae}
+.avatar img{width:100%;height:100%;object-fit:cover}
+
+/* أزرار الإدارة */
+.person-actions{
+ display:flex;
+ flex-wrap:wrap;
+ justify-content:center;
+ margin-top:8px;
+}
+.person-actions button{
+ font-size:12px;
+ padding:8px 10px;
+ margin:3px;
+}
+
+/* نظام خطوط النسب */
+.children-group{
+ position:relative;
+ width:max-content;
+ margin:0 auto;
+ padding-top:32px;
+ display:flex;
+ justify-content:center;
+}
+
+/* الخط الرأسي النازل من الأب */
+.children-group::before{
+ content:"";
+ position:absolute;
+ top:0;
+ left:50%;
+ height:32px;
+ border-left:2px solid #b79a53;
+}
+
+/* صف الإخوة والخط الأفقي المشترك */
+.children-row{
+ display:flex;
+ flex-direction:row;
+ direction:ltr;
+ justify-content:center;
+ align-items:flex-start;
+ position:relative;
+ width:max-content;
+ padding-top:18px;
+}
+
+/* يمتد الخط من مركز أول ابن إلى مركز آخر ابن */
+.children-row::before{
+ content:"";
+ position:absolute;
+ top:0;
+ left:calc(var(--card-width)/2 + var(--branch-pad));
+ right:calc(var(--card-width)/2 + var(--branch-pad));
+ border-top:2px solid #b79a53;
+}
+
+/* كل ابن له فرع رأسي مستقل */
+.child-branch{
+ position:relative;
+ display:flex;
+ flex-direction:column;
+ align-items:center;
+ padding:0 var(--branch-pad);
+}
+
+/* الخط الواصل من الخط الأفقي إلى الابن */
+.child-branch::before{
+ content:"";
+ position:absolute;
+ top:-18px;
+ height:18px;
+ left:50%;
+ border-left:2px solid #b79a53;
+}
+
+/* معلومات إضافية */
+.empty-tree{text-align:center;color:#786c54;padding:30px}
+.tree-note{font-size:12px;color:#887b60;text-align:center;margin-top:15px}
+
+@media(max-width:600px){
+ main{padding:8px}
+ .card{padding:13px}
+ #tree{
+  padding-right:10px;
+  padding-left:10px;
+  --card-width:150px;
+  --branch-pad:8px;
+ }
+ .person-card{width:var(--card-width)}
+ .avatar{width:78px;height:78px}
+}
+</style>
+</head>
+
+<body>
+<header>
+<h1>شجرة العائلة</h1>
+<p>بيت اليزيدي | بيت عيال علي القحطاني | بيت القحطاني</p>
+</header>
+
+<main>
+
+<section class="card" id="home">
+<h2>مرحبًا بكم في شجرة العائلة</h2>
+<p>اختر العائلة التي تريد الدخول إليها.</p>
+<div class="families">
+<button class="family" data-family="yazidi" data-name="بيت اليزيدي">
+<h2>بيت اليزيدي</h2><p>عرض شجرة العائلة</p>
+</button>
+<button class="family" data-family="awlad-ali" data-name="بيت عيال علي القحطاني">
+<h2>بيت عيال علي القحطاني</h2><p>عرض شجرة العائلة</p>
+</button>
+<button class="family" data-family="qahtani" data-name="بيت القحطاني">
+<h2>بيت القحطاني</h2><p>عرض شجرة العائلة</p>
+</button>
+</div>
+</section>
+
+<section class="card hidden" id="login">
+<button class="alt" id="backHome">رجوع</button>
+<h2 id="loginTitle">تسجيل الدخول</h2>
+<label>البريد الإلكتروني</label>
+<input id="email" type="email" autocomplete="username" placeholder="البريد الإلكتروني">
+<label>كلمة المرور</label>
+<input id="password" type="password" autocomplete="current-password" placeholder="كلمة المرور">
+<button id="loginButton">دخول</button>
+<p id="loginMsg" class="message"></p>
+</section>
+
+<section class="card hidden" id="dashboard">
+<div class="toolbar">
+<button class="alt" id="logoutButton">تسجيل الخروج</button>
+<button class="alt" id="refreshButton">تحديث الشجرة</button>
+</div>
+
+<h2 id="familyTitle"></h2>
+
+<div id="adminTools" class="hidden">
+<hr>
+<h2>إدارة العائلات</h2>
+<label>اختر العائلة التي تريد إدارتها</label>
+<select id="adminFamily">
+<option value="yazidi">بيت اليزيدي</option>
+<option value="awlad-ali">بيت عيال علي القحطاني</option>
+<option value="qahtani">بيت القحطاني</option>
+</select>
+
+<hr>
+<h2 id="formTitle">إضافة فرد جديد</h2>
+
+<label>اسم الشخص</label>
+<input id="personName" placeholder="اسم الشخص">
+
+<label>الجنس</label>
+<div class="gender-options">
+<label class="gender-option">
+<input type="radio" name="gender" value="male" checked> ذكر
+</label>
+<label class="gender-option">
+<input type="radio" name="gender" value="female"> أنثى
+</label>
+</div>
+
+<label>معلومات إضافية (اختياري)</label>
+<textarea id="personInfo" placeholder="معلومات إضافية"></textarea>
+
+<label>الأب (اختياري)</label>
+<select id="parentSelect">
+<option value="">بدون أب</option>
+</select>
+
+<label>صورة الشخص (اختياري)</label>
+<input id="personPhoto" type="file" accept="image/*">
+<p class="muted">يمكنك ترك الصورة فارغة إذا لم ترغب بإضافتها.</p>
+
+<div id="currentPhotoBox" class="hidden">
+<p class="muted">الصورة الحالية:</p>
+<img id="currentPhoto" alt="الصورة الحالية" style="width:90px;height:90px;object-fit:cover;border-radius:50%">
+<button type="button" class="danger" id="removeCurrentPhoto">حذف الصورة الحالية</button>
+</div>
+
+<div class="toolbar">
+<button id="savePerson">إضافة الفرد</button>
+<button class="alt hidden" id="cancelEdit">إلغاء التعديل</button>
+</div>
+<p class="muted">يمكنك إضافة الأسماء وربط كل شخص بأبيه وتعديل معلوماته لاحقًا.</p>
+</div>
+
+<hr>
+<h2>أفراد العائلة</h2>
+<input id="search" placeholder="ابحث بالاسم أو المعلومات...">
+<p id="status" class="message"></p>
+<div id="tree"></div>
+<p class="tree-note">تظهر روابط الأبناء تحت أبيهم، والإخوة في الجيل نفسه.</p>
+</section>
+</main>
+
+<footer>شجرة العائلة</footer>
+
+<script>
+const SUPABASE_URL="https://gvtpsggcjuysqgwrizsv.supabase.co";
+const SUPABASE_KEY="sb_publishable_tS4KWCeLwkmBmWF_ZWOv5g_LzejuT4f";
+const BUCKET="family-photos";
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const families={
+ "yazidi":"بيت اليزيدي",
+ "awlad-ali":"بيت عيال علي القحطاني",
+ "qahtani":"بيت القحطاني"
+};
+
+let family="";
+let familyName="";
+let role="";
+let people=[];
+let editingId=null;
+let realtimeChannel=null;
+let loading=false;
+let renderNumber=0;
+let removePhotoOnSave=false;
+
+const el=id=>document.getElementById(id);
+
+function showPage(page){
+ ["home","login","dashboard"].forEach(id=>el(id).classList.add("hidden"));
+ el(page).classList.remove("hidden");
+}
+
+function setStatus(message,success=false){
+ el("status").textContent=message;
+ el("status").className=success?"message success":"message";
+}
+
+function loginMessage(message){
+ el("loginMsg").textContent=message;
+}
+
+function selectedGender(){
+ return document.querySelector('input[name="gender"]:checked')?.value||"male";
+}
+
+function setGender(value){
+ const radio=document.querySelector('input[name="gender"][value="'+(value==="female"?"female":"male")+'"]');
+ if(radio)radio.checked=true;
+}
+
+document.querySelectorAll("[data-family]").forEach(button=>{
+ button.addEventListener("click",()=>{
+  family=button.dataset.family;
+  familyName=button.dataset.name;
+  el("loginTitle").textContent="الدخول إلى "+familyName;
+  el("email").value="";
+  el("password").value="";
+  loginMessage("");
+  showPage("login");
+ });
+});
+
+el("backHome").addEventListener("click",()=>showPage("home"));
+
+async function login(){
+ if(loading)return;
+ const email=el("email").value.trim();
+ const password=el("password").value;
+
+ if(!email||!password){
+  loginMessage("اكتب البريد الإلكتروني وكلمة المرور.");
+  return;
+ }
+
+ loading=true;
+ el("loginButton").disabled=true;
+ loginMessage("جارٍ تسجيل الدخول...");
+
+ try{
+  const result=await db.auth.signInWithPassword({email,password});
+  if(result.error)throw result.error;
+
+  const membership=await db.from("family_members")
+   .select("family_id,role")
+   .eq("user_id",result.data.user.id)
+   .single();
+
+  if(membership.error)throw new Error("لم يتم العثور على صلاحية لهذا الحساب.");
+
+  role=membership.data.role;
+
+  if(role!=="admin"&&membership.data.family_id!==family){
+   await db.auth.signOut();
+   throw new Error("هذا الحساب لا يملك صلاحية دخول هذه العائلة.");
+  }
+
+  el("adminTools").classList.toggle("hidden",role!=="admin");
+
+  if(role==="admin")el("adminFamily").value=family;
+
+  updateFamilyTitle();
+  showPage("dashboard");
+  await loadPeople();
+  subscribeRealtime();
+
+ }catch(error){
+  loginMessage("تعذر الدخول: "+(error.message||"خطأ غير معروف"));
+ }finally{
+  loading=false;
+  el("loginButton").disabled=false;
+ }
+}
+
+el("loginButton").addEventListener("click",login);
+el("password").addEventListener("keydown",e=>{if(e.key==="Enter")login();});
+
+function updateFamilyTitle(){
+ familyName=families[family]||familyName;
+ el("familyTitle").textContent=familyName;
+}
+
+el("adminFamily").addEventListener("change",async()=>{
+ if(role!=="admin")return;
+ family=el("adminFamily").value;
+ updateFamilyTitle();
+ resetForm();
+ await loadPeople();
+ subscribeRealtime();
+});
+
+async function logout(){
+ if(realtimeChannel){
+  await db.removeChannel(realtimeChannel);
+  realtimeChannel=null;
+ }
+ await db.auth.signOut();
+ people=[];
+ role="";
+ family="";
+ editingId=null;
+ showPage("home");
+}
+
+el("logoutButton").addEventListener("click",logout);
+el("refreshButton").addEventListener("click",loadPeople);
+
+async function loadPeople(){
+ setStatus("جارٍ تحميل بيانات العائلة...");
+ const result=await db.from("people")
+  .select("*")
+  .eq("family_id",family)
+  .order("name");
+
+ if(result.error){
+  setStatus("تعذر تحميل البيانات: "+result.error.message);
+  return;
+ }
+
+ people=result.data||[];
+ updateParentOptions();
+ await renderTree();
+ setStatus(people.length?"تم تحميل الشجرة بنجاح.":"لا توجد أسماء مضافة حتى الآن.",true);
+}
+
+function updateParentOptions(){
+ const select=el("parentSelect");
+ const previous=select.value;
+ select.innerHTML='<option value="">بدون أب</option>';
+
+ people.forEach(person=>{
+  if(editingId===person.id)return;
+  const option=document.createElement("option");
+  option.value=person.id;
+  option.textContent=person.name;
+  select.appendChild(option);
+ });
+
+ if(previous&&[...select.options].some(o=>o.value===previous)){
+  select.value=previous;
+ }
+}
+
+function resetForm(){
+ editingId=null;
+ removePhotoOnSave=false;
+ el("personName").value="";
+ el("personInfo").value="";
+ el("personPhoto").value="";
+ el("currentPhotoBox").classList.add("hidden");
+ el("parentSelect").value="";
+ setGender("male");
+ el("formTitle").textContent="إضافة فرد جديد";
+ el("savePerson").textContent="إضافة الفرد";
+ el("cancelEdit").classList.add("hidden");
+ updateParentOptions();
+}
+
+el("cancelEdit").addEventListener("click",resetForm);
+
+function isDescendant(parentId,targetId,visited=new Set()){
+ if(!parentId||visited.has(parentId))return false;
+ if(parentId===targetId)return true;
+ visited.add(parentId);
+ const children=people.filter(p=>p.parent_id===parentId);
+ return children.some(child=>isDescendant(child.id,targetId,visited));
+}
+
+async function savePerson(){
+ if(role!=="admin")return alert("ليس لديك صلاحية التعديل.");
+
+ const name=el("personName").value.trim();
+ const info=el("personInfo").value.trim();
+ const parentId=el("parentSelect").value||null;
+ const gender=selectedGender();
+ const file=el("personPhoto").files[0];
+ const personId=editingId;
+
+ if(!name)return alert("اكتب اسم الشخص.");
+
+ if(personId&&parentId&&isDescendant(parentId,personId)){
+  return alert("لا يمكن ربط الشخص بأحد أحفاده.");
+ }
+
+ const button=el("savePerson");
+ button.disabled=true;
+ button.textContent="جارٍ الحفظ...";
+
+ let uploadedPath=null;
+ let oldPhoto=null;
+
+ try{
+  const row={
+   family_id:family,
+   parent_id:parentId,
+   name:name,
+   info:info,
+   gender:gender
+  };
+
+  if(personId){
+   const old=people.find(p=>p.id===personId);
+   oldPhoto=old?.photo_path||null;
+  }
+
+  if(file){
+   if(!file.type.startsWith("image/"))throw new Error("اختر ملف صورة صالحًا.");
+   if(file.size>5*1024*1024)throw new Error("حجم الصورة يجب ألا يتجاوز 5 ميجابايت.");
+
+   const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+   uploadedPath=family+"/"+crypto.randomUUID()+"."+ext;
+
+   const upload=await db.storage.from(BUCKET).upload(uploadedPath,file);
+   if(upload.error)throw upload.error;
+   row.photo_path=uploadedPath;
+  }else if(removePhotoOnSave){
+   row.photo_path=null;
+  }
+
+  let result;
+  if(personId){
+   result=await db.from("people").update(row).eq("id",personId);
+  }else{
+   result=await db.from("people").insert(row);
+  }
+
+  if(result.error)throw result.error;
+
+  if(oldPhoto&&(file||removePhotoOnSave)){
+   await db.storage.from(BUCKET).remove([oldPhoto]);
+  }
+
+  resetForm();
+  await loadPeople();
+
+ }catch(error){
+  if(uploadedPath){
+   await db.storage.from(BUCKET).remove([uploadedPath]);
+  }
+  alert("تعذر الحفظ: "+(error.message||"خطأ غير معروف"));
+ }finally{
+  button.disabled=false;
+  button.textContent=editingId?"حفظ التعديل":"إضافة الفرد";
+ }
+}
+
+el("savePerson").addEventListener("click",savePerson);
+
+function startEdit(id){
+ if(role!=="admin")return;
+ const person=people.find(p=>p.id===id);
+ if(!person)return;
+
+ editingId=id;
+ removePhotoOnSave=false;
+ el("personName").value=person.name;
+ el("personInfo").value=person.info||"";
+ el("personPhoto").value="";
+ setGender(person.gender||"male");
+ updateParentOptions();
+ el("parentSelect").value=person.parent_id||"";
+ el("formTitle").textContent="تعديل بيانات "+person.name;
+ el("savePerson").textContent="حفظ التعديل";
+ el("cancelEdit").classList.remove("hidden");
+
+ if(person.photo_path){
+  showPhotoPreview(person.photo_path);
+ }else{
+  el("currentPhotoBox").classList.add("hidden");
+ }
+
+ el("personName").scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+async function showPhotoPreview(path){
+ const result=await db.storage.from(BUCKET).createSignedUrl(path,3600);
+ if(result.data?.signedUrl){
+  el("currentPhoto").src=result.data.signedUrl;
+  el("currentPhotoBox").classList.remove("hidden");
+ }
+}
+
+el("removeCurrentPhoto").addEventListener("click",()=>{
+ if(!editingId)return;
+ if(!confirm("هل تريد حذف الصورة الحالية؟"))return;
+ removePhotoOnSave=true;
+ el("currentPhotoBox").classList.add("hidden");
+ alert("سيتم حذف الصورة عند الضغط على حفظ التعديل.");
+});
+
+async function deletePhoto(id){
+ if(role!=="admin")return;
+ const person=people.find(p=>p.id===id);
+ if(!person?.photo_path)return;
+ if(!confirm("هل تريد حذف صورة "+person.name+"؟"))return;
+
+ const result=await db.from("people")
+  .update({photo_path:null})
+  .eq("id",id);
+
+ if(result.error){
+  alert("تعذر حذف الصورة: "+result.error.message);
+  return;
+ }
+
+ await db.storage.from(BUCKET).remove([person.photo_path]);
+ await loadPeople();
+}
+
+async function deletePerson(id){
+ if(role!=="admin")return;
+ const person=people.find(p=>p.id===id);
+ if(!person)return;
+
+ if(people.some(p=>p.parent_id===id)){
+  alert("لا يمكن حذف هذا الشخص قبل معالجة بيانات الأبناء المرتبطين به.");
+  return;
+ }
+
+ if(!confirm("هل تريد حذف "+person.name+"؟"))return;
+
+ const result=await db.from("people").delete().eq("id",id);
+
+ if(result.error){
+  alert("تعذر الحذف: "+result.error.message);
+  return;
+ }
+
+ if(person.photo_path){
+  await db.storage.from(BUCKET).remove([person.photo_path]);
+ }
+
+ await loadPeople();
+}
+
+function matchesSearch(person,query){
+ return (person.name||"").toLowerCase().includes(query)||
+  (person.info||"").toLowerCase().includes(query);
+}
+
+function branchMatches(person,query,visited=new Set()){
+ if(visited.has(person.id))return false;
+ visited.add(person.id);
+ if(matchesSearch(person,query))return true;
+ return people
+  .filter(p=>p.parent_id===person.id)
+  .some(child=>branchMatches(child,query,new Set(visited)));
+}
+
+async function makePersonNode(person,current){
+ const node=document.createElement("div");
+ node.className="person-node";
+
+ const card=document.createElement("div");
+ card.className="person-card";
+
+ const avatar=document.createElement("div");
+ avatar.className="avatar "+(person.gender==="female"?"female":"male");
+
+ if(person.photo_path){
+  const photo=await db.storage.from(BUCKET).createSignedUrl(person.photo_path,3600);
+  if(current!==renderNumber)return node;
+
+  if(photo.data?.signedUrl){
+   const img=document.createElement("img");
+   img.src=photo.data.signedUrl;
+   img.alt="صورة "+person.name;
+   avatar.appendChild(img);
+  }else{
+   avatar.textContent=person.gender==="female"?"♀":"♂";
+  }
+ }else{
+  avatar.textContent=person.gender==="female"?"♀":"♂";
+ }
+
+ card.appendChild(avatar);
+
+ const title=document.createElement("strong");
+ title.textContent=person.name;
+ card.appendChild(title);
+
+ if(person.info){
+  const info=document.createElement("p");
+  info.textContent=person.info;
+  card.appendChild(info);
+ }
+
+ if(role==="admin"){
+  const actions=document.createElement("div");
+  actions.className="person-actions";
+
+  const edit=document.createElement("button");
+  edit.className="alt";
+  edit.textContent="تعديل";
+  edit.addEventListener("click",()=>startEdit(person.id));
+
+  const del=document.createElement("button");
+  del.className="danger";
+  del.textContent="حذف";
+  del.addEventListener("click",()=>deletePerson(person.id));
+
+  actions.append(edit,del);
+
+  if(person.photo_path){
+   const photoDelete=document.createElement("button");
+   photoDelete.className="danger";
+   photoDelete.textContent="حذف الصورة";
+   photoDelete.addEventListener("click",()=>deletePhoto(person.id));
+   actions.appendChild(photoDelete);
+  }
+
+  card.appendChild(actions);
+ }
+
+ node.appendChild(card);
+ return node;
+}
+
+async function drawPerson(person,query,current){
+ if(current!==renderNumber)return null;
+
+ const node=await makePersonNode(person,current);
+ if(current!==renderNumber)return null;
+
+ const children=people.filter(p=>p.parent_id===person.id);
+ const visibleChildren=query
+  ?children.filter(child=>branchMatches(child,query))
+  :children;
+
+ if(visibleChildren.length){
+  const group=document.createElement("div");
+  group.className="children-group";
+
+  const row=document.createElement("div");
+  row.className="children-row";
+
+  for(const child of visibleChildren){
+   const branch=document.createElement("div");
+   branch.className="child-branch";
+
+   const childNode=await drawPerson(child,query,current);
+   if(current!==renderNumber)return null;
+
+   if(childNode)branch.appendChild(childNode);
+   row.appendChild(branch);
+  }
+
+  group.appendChild(row);
+  node.appendChild(group);
+ }
+
+ return node;
+}
+
+async function renderTree(){
+ const current=++renderNumber;
+ const tree=el("tree");
+ const query=el("search").value.trim().toLowerCase();
+ tree.innerHTML="";
+
+ if(!people.length){
+  tree.innerHTML='<div class="empty-tree">لا توجد أسماء مضافة لهذه العائلة حتى الآن.</div>';
+  return;
+ }
+
+ const roots=people.filter(p=>!p.parent_id);
+ const visibleRoots=query
+  ?roots.filter(person=>branchMatches(person,query))
+  :roots;
+
+ const rootContainer=document.createElement("div");
+ rootContainer.className="tree-roots";
+
+ for(const person of visibleRoots){
+  const node=await drawPerson(person,query,current);
+  if(current!==renderNumber)return;
+  if(node)rootContainer.appendChild(node);
+ }
+
+ if(current===renderNumber){
+  if(!rootContainer.children.length){
+   tree.innerHTML='<div class="empty-tree">لا توجد نتائج مطابقة للبحث.</div>';
+  }else{
+   tree.appendChild(rootContainer);
+  }
+ }
+}
+
+el("search").addEventListener("input",renderTree);
+
+function subscribeRealtime(){
+ if(realtimeChannel){
+  db.removeChannel(realtimeChannel);
+  realtimeChannel=null;
+ }
+
+ realtimeChannel=db.channel("family-tree-live-"+family)
+  .on("postgres_changes",{
+   event:"*",
+   schema:"public",
+   table:"people"
+  },()=>{
+   loadPeople();
+  })
+  .subscribe();
+}
+</script>
+</body>
+</html>
